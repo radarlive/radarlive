@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>best result </title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body, html, #map { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #111; font-family: sans-serif;}
+
+        /* --- GLOBAL GLASSY EFFECT --- */
+        .glassy {
+            background: rgba(255, 252, 239, 0.85) !important;
+            backdrop-filter: blur(15px) saturate(160%);
+            -webkit-backdrop-filter: blur(15px) saturate(160%);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            border-radius: 20px;
+        }
+
+        /* --- LAYER CONTROL POSITIONING --- */
+        /* Pushing the control box down so the Top Switch doesn't cover it */
+        .leaflet-top.leaflet-right {
+            margin-top: 75px !important;
+        }
+
+        .leaflet-control-layers {
+            background: rgba(255, 252, 239, 0.85) !important;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.4) !important;
+            border-radius: 12px !important;
+            padding: 10px !important;
+            font-weight: 600;
+            color: #333;
+        }
+
+        /* --- TOP MASTER SWITCH (Fixed Thumb) --- */
+        .top-switch-container {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            padding: 8px 16px;
+            border-radius: 50px;
+            white-space: nowrap;
+        }
+        .switch-label { font-weight: bold; margin: 0 10px; font-size: 11px; color: #666; text-transform: uppercase; }
+        .switch-label.active { color: #2b8ede; }
+
+        /* Mobile-Safe Switch Thumb */
+        .switch { 
+            position: relative; display: inline-block; 
+            width: 48px; height: 24px; 
+            box-sizing: border-box; 
+            overflow: visible; /* Prevent clipping issues */
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { 
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; 
+            background-color: rgba(0,0,0,0.1); transition: .4s; border-radius: 34px; 
+        }
+        .slider:before { 
+            position: absolute; content: ""; 
+            height: 18px; width: 18px; 
+            left: 3px; bottom: 3px; 
+            background-color: white; transition: .4s; border-radius: 50%; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 2;
+        }
+        input:checked + .slider { background-color: #2b8ede; }
+        input:checked + .slider:before { 
+            transform: translateX(24px); /* Precision movement for mobile */
+        }
+
+        /* --- BOTTOM UI --- */
+        .bottom-wrapper {
+            position: absolute;
+            bottom: 40px; /* Lifted slightly */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1500;
+            width: 90%;
+            max-width: 450px;
+        }
+        .control-panel { padding: 15px; width: 100%; box-sizing: border-box; }
+        .timeline-ui { display: flex; align-items: center; gap: 12px; }
+        .play-btn { background: #2b8ede; border: none; border-radius: 50%; width: 34px; height: 34px; color: white; cursor: pointer; font-size: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .time-display { font-size: 13px; font-weight: bold; color: #333; min-width: 70px; text-align: right; }
+
+        .owm-ui { display: flex; flex-direction: column; gap: 12px; }
+        .slider-row { display: flex; align-items: center; gap: 10px; }
+        .slider-row label { font-size: 11px; font-weight: bold; color: #444; flex: 1; }
+        input[type=range] { -webkit-appearance: none; flex: 2; height: 5px; background: rgba(0,0,0,0.1); border-radius: 5px; outline: none; accent-color: #2b8ede; }
+
+        /* --- ATTRIBUTION (!) - Repositioned Lower --- */
+        .leaflet-control-attribution { display: none !important; }
+        .attr-trigger {
+            position: absolute;
+            bottom: 10px; /* Moved down to avoid overlapping the panel */
+            right: 15px;
+            z-index: 3000;
+            width: 22px; height: 22px;
+            background: rgba(255, 252, 239, 0.9);
+            color: #2b8ede; font-weight: 900; font-size: 12px;
+            border-radius: 50%; border: none;
+            cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .attr-content {
+            position: absolute;
+            bottom: 40px; right: 15px;
+            z-index: 2500;
+            font-size: 10px; max-width: 180px;
+            padding: 12px; display: none; line-height: 1.5;
+        }
+
+        .hidden { display: none !important; }
+        .clouds-grey { filter: invert(85%); }
+        .rain-cyan { filter: hue-rotate(300deg) saturate(2.5) brightness(1.2); }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="top-switch-container glassy">
+    <span class="switch-label active" id="labelOWM">سحب-أمطار</span>
+    <label class="switch">
+        <input type="checkbox" id="modeSwitch">
+        <span class="slider"></span>
+    </label>
+    <span class="switch-label" id="labelRADAR">ٌرادار</span>
+</div>
+
+<div class="bottom-wrapper">
+    <div id="radarPanel" class="control-panel glassy timeline-ui hidden">
+        <button id="playBtn" class="play-btn">▶</button>
+        <input type="range" id="timeSlider" min="0" max="12" value="12" style="flex-grow:1">
+        <span id="timeLabel" class="time-display">00:00</span>
+    </div>
+
+    <div id="owmPanel" class="control-panel glassy owm-ui">
+        <div class="slider-row">
+            <label>أمطار</label>
+            <input type="range" id="opPrecip" min="0" max="1" step="0.1" value="0.8">
+        </div>
+        <div class="slider-row">
+            <label>سحب</label>
+            <input type="range" id="opClouds" min="0" max="1" step="0.1" value="0.7">
+        </div>
+    </div>
+</div>
+
+<button class="attr-trigger" id="attrBtn">!</button>
+<div class="glassy attr-content" id="attrBox">
+    <strong>Base:</strong> OSM, Carto, OpenTopoMap, leaflet.<br>
+    <strong>Weather:</strong> OpenWeatherMap & RainViewer Radar.
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+const OWM_KEY = "d22d9a6a3ff2aa523d5917bbccc89211";
+
+// 1. Base Maps
+const baseMaps = {
+    "Dark Mode": L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'),
+    "جغرافي": L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"),
+    "OSM": L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"),
+    "قوقل ماب": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}")
+};
+
+const map = L.map("map", { zoomControl: false, attributionControl: false }).setView([30, 31], 5);
+baseMaps["Dark Mode"].addTo(map);
+
+// 2. OpenWeatherMap Layers
+const owmClouds = L.tileLayer(`https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${OWM_KEY}`, { className: 'clouds-grey', opacity: 0.7 });
+const owmPrecip = L.tileLayer(`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OWM_KEY}`, { className: 'rain-cyan', opacity: 0.8 });
+const owmTemp = L.tileLayer(`https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=${OWM_KEY}`, { opacity: 0.5 });
+const owmWind = L.tileLayer(`https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${OWM_KEY}`, { opacity: 0.5 });
+const owmPres = L.tileLayer(`https://tile.openweathermap.org/map/pressure_new/{z}/{x}/{y}.png?appid=${OWM_KEY}`, { opacity: 0.4 });
+
+const weatherOverlays = {
+    "سحب": owmClouds,
+    "أمطار": owmPrecip,
+    "درجة حرارة": owmTemp,
+    "ضغط": owmPres,
+    "رياح": owmWind
+};
+
+// Default OWM start
+owmClouds.addTo(map);
+owmPrecip.addTo(map);
+
+// Layer Control
+let ctrl = L.control.layers(baseMaps, weatherOverlays, { collapsed: false }).addTo(map);
+
+// 3. RainViewer Logic
+let rvFrames = [];
+let rvIdx = 0;
+let rvInterval = null;
+
+async function initRadar() {
+    const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const data = await res.json();
+    rvFrames = data.radar.past.map(f => ({
+        layer: L.tileLayer(`${data.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`, { opacity: 0, zIndex: 500 }),
+        time: new Date(f.time * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+    }));
+    rvFrames.forEach(f => f.layer.addTo(map));
+    rvIdx = rvFrames.length - 1;
+    updateRadarDisplay();
+}
+
+function updateRadarDisplay() {
+    rvFrames.forEach((f, i) => f.layer.setOpacity(i === rvIdx ? 0.9 : 0));
+    document.getElementById('timeLabel').innerText = rvFrames[rvIdx].time;
+    document.getElementById('timeSlider').max = rvFrames.length - 1;
+    document.getElementById('timeSlider').value = rvIdx;
+}
+
+// 4. Mode Switching
+document.getElementById('modeSwitch').addEventListener('change', (e) => {
+    const isRadar = e.target.checked;
+    document.getElementById('owmPanel').classList.toggle('hidden', isRadar);
+    document.getElementById('radarPanel').classList.toggle('hidden', !isRadar);
+    document.getElementById('labelOWM').classList.toggle('active', !isRadar);
+    document.getElementById('labelRADAR').classList.toggle('active', isRadar);
+
+    if (isRadar) {
+        Object.values(weatherOverlays).forEach(l => map.removeLayer(l));
+        map.removeControl(ctrl);
+        ctrl = L.control.layers(baseMaps, {}, { collapsed: false }).addTo(map);
+        if (rvFrames.length === 0) initRadar();
+        else { rvFrames.forEach(f => f.layer.addTo(map)); updateRadarDisplay(); }
+    } else {
+        rvFrames.forEach(f => map.removeLayer(f.layer));
+        if (rvInterval) clearInterval(rvInterval);
+        map.removeControl(ctrl);
+        ctrl = L.control.layers(baseMaps, weatherOverlays, { collapsed: false }).addTo(map);
+        owmClouds.addTo(map); owmPrecip.addTo(map);
+    }
+});
+
+// Interactions
+document.getElementById('timeSlider').oninput = (e) => { rvIdx = parseInt(e.target.value); updateRadarDisplay(); };
+document.getElementById('opPrecip').oninput = (e) => owmPrecip.setOpacity(e.target.value);
+document.getElementById('opClouds').oninput = (e) => owmClouds.setOpacity(e.target.value);
+
+document.getElementById('playBtn').onclick = function() {
+    if (rvInterval) {
+        clearInterval(rvInterval); rvInterval = null; this.innerText = "▶";
+    } else {
+        this.innerText = "⏸";
+        rvInterval = setInterval(() => {
+            rvIdx = (rvIdx + 1) % rvFrames.length;
+            updateRadarDisplay();
+        }, 700);
+    }
+};
+
+document.getElementById('attrBtn').onclick = () => {
+    const box = document.getElementById('attrBox');
+    box.style.display = box.style.display === 'block' ? 'none' : 'block';
+};
+</script>
+
+</body>
+</html>
